@@ -46,6 +46,13 @@ namespace eval ::lycanobot {
             }
          }
       }
+      proc ::hook {subcmd args} {
+         set cmd ::hook::$subcmd
+         if {[llength [info commands $cmd]] == 0} {
+            return -code error "sous-commande hook inconnue: $subcmd"
+         }
+         return [$cmd {*}$args]
+      }
    }
    
    if {[catch {package require json}]} {
@@ -957,6 +964,9 @@ namespace eval ::lycanobot {
          if {[validchan [set [namespace current]::curNight]] && [botonchan [set [namespace current]::curNight]]} {
             foreach wlv [chanlist [set [namespace current]::curNight]] {
                pushmode [set [namespace current]::curNight] -v $wlv
+               if {![isbotnick $wlv]} {
+                  putkick [set [namespace current]::curNight] $wlv "La partie est terminee. La taniere se referme."
+               }
             }
          }
       }
