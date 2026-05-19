@@ -7,7 +7,7 @@ namespace eval witch {
 		[namespace parent]::i18n [set [namespace parent]::conf(lang)] "job.[namespace tail [namespace current]]"
 		set [namespace current]::nick [[namespace parent]::pickfreenick]
 		lappend [namespace parent]::jobbers [set [namespace current]::nick]
-		putserv "PRIVMSG [set [namespace current]::nick] :[::msgcat::mc "You are the Wicth: Each night, you can reveal the identity of a player."]"
+		putserv "PRIVMSG [set [namespace current]::nick] :Tu es la Sorciere. Ton pouvoir sera active dans une prochaine etape."
 	}
 	
 	hook bind job newnight witch [namespace current]::newnight

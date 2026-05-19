@@ -2,25 +2,32 @@ namespace eval seer {
 
 	variable nick
    variable tries
+   variable timerName "role_seer_timeout"
 	
 	hook bind job start seer [namespace current]::start
 	proc start {} {
 		[namespace parent]::i18n [set [namespace parent]::conf(lang)] "job.[namespace tail [namespace current]]"
 		set [namespace current]::nick [[namespace parent]::pickfreenick]
-      [namespace parent]::dlog ">>> got [set [namespace current]::nick] as Seer"
+      [namespace parent]::dlog ">>> [set [namespace current]::nick] recoit le role Voyante"
 		lappend [namespace parent]::jobbers [set [namespace current]::nick]
-		putserv "PRIVMSG [set [namespace current]::nick] :[::msgcat::mc "You are the Seer: each night, you can reveal the real identity of a player."]"
-      putserv "PRIVMSG [set [namespace current]::nick] :[::msgcat::mc "Think to do this each night before the werewolves kill someone..."]"
+		putserv "PRIVMSG [set [namespace current]::nick] :Tu es la Voyante: chaque nuit, tu peux sonder l'ame d'un joueur."
+      putserv "PRIVMSG [set [namespace current]::nick] :Agis avant que les loups ne choisissent leur victime."
 	}
 	
-	hook bind job newnight seer [namespace current]::newnight
-	proc newnight {night} {
+   hook bind job newnight seer [namespace current]::newnight
+   proc newnight {night} {
+      if {![info exists [namespace current]::nick]} { return }
       if {[[namespace parent]::isAlive [set [namespace current]::nick]]} {
          set [namespace current]::tries 0
-         putquick "PRIVMSG [set [namespace current]::nick] :[::msgcat::mc "Type \002%1\$s \00303player\003\002 in this window to know if \00303player\003 is a werewolf or not" [::msgcat::mc "!whois"]]"
-         putquick "PRIVMSG [set [namespace current]::nick] :[::msgcat::mc "Or use \002%1\$s\002 to pass for this night" [::msgcat::mc "!pass"]]"
-         bind msgm - "*[::msgcat::mc "!whois"]*" [namespace current]::whois
-         bind msgm - "*[::msgcat::mc "!pass"]*" [namespace current]::pass
+         putquick "PRIVMSG [set [namespace current]::nick] :Tape \002[[namespace parent]::primaryCommand cmdSeerCheck] <joueur>\002 ici pour savoir si ce joueur est loup-garou."
+         putquick "PRIVMSG [set [namespace current]::nick] :Tu peux aussi taper \002[[namespace parent]::primaryCommand cmdRolePass]\002 pour ne rien faire cette nuit."
+         foreach cmd [[namespace parent]::commandAliases cmdSeerCheck] {
+            bind msgm - "*$cmd*" [namespace current]::whois
+         }
+         foreach cmd [[namespace parent]::commandAliases cmdRolePass] {
+            bind msgm - "*$cmd*" [namespace current]::pass
+         }
+         [namespace parent]::registerGameTimer [set [namespace parent]::conf(roleTimeout)] [list [namespace current]::timeout $night] [set [namespace current]::timerName]
       }
 	}
 
@@ -33,45 +40,60 @@ namespace eval seer {
    proc newday {day} {
       [namespace current]::cleanBinds
    }
+
+   proc timeout {night} {
+      if {![info exists [namespace current]::tries] || [set [namespace current]::tries] == 0} {
+         set [namespace current]::tries 1
+         if {[info exists [namespace current]::nick] && [[namespace parent]::isAlive [set [namespace current]::nick]]} {
+            putserv "PRIVMSG [set [namespace current]::nick] :Le temps est ecoule, tu passes ton tour."
+         }
+      }
+      [namespace current]::cleanBinds
+   }
    
    proc pass {nick uhost handle text} {
       set text [stripcodes * $text]
       if {![string match -nocase $nick [set [namespace current]::nick]]} {
-         putserv "PRIVMSG $nick :[msgcat::mc "Well, you don't seem to be the Seer."]"
+         putserv "PRIVMSG $nick :Tu n'es pas la Voyante."
          return
       }
       lassign [split $text] cmd
-      if {[string match -nocase $cmd [::msgcat::mc "!pass"]]} {
+      if {[[namespace current]::matchesCommand cmdRolePass $cmd]} {
          set [namespace current]::tries 1
-         putserv "PRIVMSG $nick :[msgcat::mc "Ok, it's recorded"]"
+         [namespace parent]::killTimerByName [set [namespace current]::timerName]
+         putserv "PRIVMSG $nick :C'est note, tu passes cette nuit."
+         [namespace current]::cleanBinds
       }
    }
    
    proc whois {nick uhost handle text} {
       set text [stripcodes * $text]
       if {![string match -nocase $nick [set [namespace current]::nick]]} {
-         putserv "PRIVMSG $nick :[msgcat::mc "Well, you don't seem to be the Seer."]"
+         putserv "PRIVMSG $nick :Tu n'es pas la Voyante."
          return
       }
       lassign [split $text] cmd vnick
-      if {(![string match -nocase $cmd [::msgcat::mc "!whois"]]) || ($vnick eq "")} {
-         putquick "PRIVMSG $nick :[::msgcat::mc "Sorry, I didn't understand. Type \002%1\$s \00303player\003\002" [::msgcat::mc "!whois"]]"
+      if {![[namespace current]::matchesCommand cmdSeerCheck $cmd] || ($vnick eq "")} {
+         putquick "PRIVMSG $nick :Je n'ai pas compris. Tape \002[[namespace parent]::primaryCommand cmdSeerCheck] <joueur>\002."
          return
       }
       if {[info exists [namespace current]::tries] && [set [namespace current]::tries] > 0} {
-         putserv "PRIVMSG $nick :[::msgcat::mc "You already reveal someone this night, don't cheat please"]"
+         putserv "PRIVMSG $nick :Tu as deja utilise ton don cette nuit."
          return
       }
       set [namespace current]::tries 1
+      [namespace parent]::killTimerByName [set [namespace current]::timerName]
       if {![[namespace parent]::isAlive $vnick]} {
-         putserv "PRIVMSG $nick :[msgcat::mc "Well... %1\$s is dead or not a player, you've lost a trick." $vnick]"
+         putserv "PRIVMSG $nick :$vnick est mort ou ne joue pas. Ton pouvoir est tout de meme consomme."
+         [namespace current]::cleanBinds
          return
       }
       if {![[namespace parent]::isWolf $vnick]} {
-         putserv "PRIVMSG $nick :[::msgcat::mc "Good news: \00303%1\$s\003 is a villager, you can trust him." $vnick]"
+         putserv "PRIVMSG $nick :La vision est claire: \00303$vnick\003 n'est pas loup-garou."
       } else {
-         putserv "PRIVMSG $nick :[::msgcat::mc "Oh oh... \00304%1\$s\003 is a werewolf, beware of him." $vnick]"
+         putserv "PRIVMSG $nick :La vision se trouble: \00304$vnick\003 est loup-garou."
       }
+      [namespace current]::cleanBinds
    }
    
    hook bind job nickChange seer [namespace current]::nickChange
@@ -83,14 +105,25 @@ namespace eval seer {
    
    hook bind job clean seer [namespace current]::clean
    proc clean {} {
-      unset [namespace current]::nick
+      catch {unset [namespace current]::nick}
+      catch {unset [namespace current]::tries}
       [namespace current]::cleanBinds
    }
    
    proc cleanBinds {} {
+      [namespace parent]::killTimerByName [set [namespace current]::timerName]
       foreach b [binds "[namespace current]*"] {
          lassign $b t f k n c
          unbind $t $f $k $c
       }
+   }
+
+   proc matchesCommand {key cmd} {
+      foreach alias [[namespace parent]::commandAliases $key] {
+         if {[string equal -nocase $cmd $alias]} {
+            return 1
+         }
+      }
+      return 0
    }
 }
