@@ -1,0 +1,1 @@
+"You are the Wicth: Each night, you can reveal the identity of a player." "Vous êtes la sorcière/le sorcier: chaque nuit, vous pouvez découvrir l'identité d'un joueur"

@@ -1,0 +1,5 @@
+"You are the Angel: if you get killed the first day, you win." "Tu es l'Ange: si tu te fais tuer lors du premier jour, tu gagnes la partie."
+"Do not forget: if you are the victim on the day, you win." "N'oublie pas: si tu es la victime de la journée, tu gagnes la partie."
+"You die, you win!" "Tu viens de mourir, tu as gagné la partie !"
+"You killed the Angel, he win the game." "Vous avez tué l'Ange, il gagne donc la partie"
+"As Angel, you was not killed, you are now a simple citizen." "L'Ange n'a pas été tué, tu redeviens un simple citoyen"

@@ -1,0 +1,5 @@
+"Your fate is tied to that of %1\$s. Your goal is to survive together." "Ton destin est lié à celui de %1\$s. Votre but est de survivre ensemble."
+"You have just been killed, %1\$s decides to join you in death." "Tu viens d'être tué(e), %1\$s décide de te rejoindre dans la mort."
+"%1\$s is dead, you kill yourself." "%1\$s est mort, tu te suicides."
+"%1\$s cannot live without %2\$s and commits suicide." "%1\$s ne peut pas vivre sans %2\$s et se suicide."
+"The lovers are the only survivors! Love is stronger than anything." "Les amoureux sont les seuls survivants ! L'amour est plus fort que tout."
