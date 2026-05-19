@@ -80,11 +80,14 @@ namespace eval ::lycanobot {
       [namespace current]::configDefault admins ""
       [namespace current]::configDefault gameBans ""
       [namespace current]::configDefault roleTimeout 2
+      [namespace current]::configDefault voteTimeout 3
       [namespace current]::configDefault compositionCooldown 60
       [namespace current]::configDefault requireWolvesOp 1
       [namespace current]::configDefault requireMainOp 1
       [namespace current]::configDefault cleanLegacyNightChannels 1
       [namespace current]::configDefault legacyNightChannelPattern ""
+      [namespace current]::configDefault legacyMainChannels ""
+      [namespace current]::configDefault wolvesChannelModes "+is"
       [namespace current]::configDefault cmdStart "!partie !start !game"
       [namespace current]::configDefault cmdJoin "!jouer !play !join"
       [namespace current]::configDefault cmdComplete "!complet"
@@ -127,6 +130,31 @@ namespace eval ::lycanobot {
       }
    }
 
+   proc cleanupLegacyMainChannels {} {
+      set current [string tolower [set [namespace current]::conf(chanDay)]]
+      foreach chan [split [set [namespace current]::conf(legacyMainChannels)]] {
+         set chan [string trim $chan]
+         if {$chan eq "" || [string tolower $chan] eq $current} {
+            continue
+         }
+         if {[validchan $chan]} {
+            [namespace current]::dlog "--> Suppression de l'ancien salon public persistant: $chan"
+            catch {channel remove $chan}
+         }
+      }
+   }
+
+   proc applyWolvesChannelModes {} {
+      set chan [set [namespace current]::conf(chanNight)]
+      if {![validchan $chan] || ![botonchan $chan]} {
+         return
+      }
+      set modes [string trim [set [namespace current]::conf(wolvesChannelModes)]]
+      if {$modes ne ""} {
+         pushmode $chan $modes
+      }
+   }
+
    proc cleanupWolvesChannel {} {
       set chans [list [set [namespace current]::conf(chanNight)]]
       if {[info exists [namespace current]::curNight] && [set [namespace current]::curNight] ne ""} {
@@ -148,6 +176,14 @@ namespace eval ::lycanobot {
             }
          }
       }
+   }
+
+   proc aliveList {{exclude ""}} {
+      set alive [set [namespace current]::players]
+      if {$exclude ne ""} {
+         set alive [::utils::lremove $alive $exclude -nocase]
+      }
+      return [join $alive {, }]
    }
 
    proc initNarration {} {
@@ -422,6 +458,11 @@ namespace eval ::lycanobot {
       }
    }
 
+   proc cancelVoteTimer {} {
+      [namespace current]::killTimerByName "vote_timeout"
+      set [namespace current]::gameTimers [::utils::lremove [set [namespace current]::gameTimers] "vote_timeout" -nocase]
+   }
+
    proc cleanupGameTimers {} {
       foreach t [concat [list "ltend" "lthalf" "ltone"] [set [namespace current]::gameTimers]] {
          [namespace current]::killTimerByName $t
@@ -552,6 +593,7 @@ namespace eval ::lycanobot {
       [namespace current]::initNarration
       [namespace current]::dlog "Initialisation de la partie"
       [namespace current]::cleanupLegacyNightChannels
+      [namespace current]::cleanupLegacyMainChannels
       if {![validchan [set [namespace current]::conf(chanDay)]]} {
          [namespace current]::dlog "--> Joining channel [set [namespace current]::conf(chanDay)]]"
          channel add [set [namespace current]::conf(chanDay)]
@@ -580,6 +622,7 @@ namespace eval ::lycanobot {
       [namespace current]::bindPubAliases [[namespace current]::commandAliases cmdRoles] - [namespace current]::showRoles
       [namespace current]::bindPubAliases [[namespace current]::compositionAliases] - [namespace current]::showComposition
       [namespace current]::bindPubAliases [[namespace current]::commandAliases cmdRules] - [namespace current]::showrules
+      [namespace current]::applyWolvesChannelModes
    }
 
    proc startGame {nick uhost handle chan args} {
@@ -897,6 +940,7 @@ namespace eval ::lycanobot {
          return ""
       }
       [namespace current]::dlog "Using fixed wolves channel [set [namespace current]::curNight]"
+      [namespace current]::applyWolvesChannelModes
       bind join - "[set [namespace current]::curNight] *" [namespace current]::wolfInChannel
       return [set [namespace current]::curNight]
    }
@@ -920,6 +964,7 @@ namespace eval ::lycanobot {
       set [namespace current]::phase "nuit"
       [namespace current]::dlog "-v- Night [set [namespace current]::nightcount] - Got [llength [set [namespace current]::players]] players and [llength [set [namespace current]::wolves]] wolves"
       [namespace current]::resetVotes
+      [namespace current]::cancelVoteTimer
       set [namespace current]::round 0
       [namespace current]::narrate [set [namespace current]::conf(chanDay)] night_start
       [namespace current]::dlog "-v- Running night jobs"
@@ -929,9 +974,12 @@ namespace eval ::lycanobot {
       }
       [namespace current]::narrate [set [namespace current]::curNight] wolves_wake
       [namespace current]::narrate [set [namespace current]::curNight] wolves_vote [[namespace current]::primaryCommand cmdVote]
+      putserv "PRIVMSG [set [namespace current]::curNight] :Victimes possibles: [[namespace current]::aliveList]."
+      putserv "PRIVMSG [set [namespace current]::curNight] :La meute a [set [namespace current]::conf(voteTimeout)] minute(s) pour choisir. Sans accord, le tour sera resolu avec les votes presents."
       foreach wlv [set [namespace current]::wolves] {
          pushmode [set [namespace current]::curNight] +v $wlv
       }
+      [namespace current]::registerGameTimer [set [namespace current]::conf(voteTimeout)] [list [namespace current]::voteTimeout] vote_timeout
    }
 
    # It's day, so wolves shut up and
@@ -942,9 +990,12 @@ namespace eval ::lycanobot {
       set [namespace current]::phase "jour"
       [namespace current]::dlog "-^- Day [set [namespace current]::daycount] - Got [llength [set [namespace current]::players]] players and [llength [set [namespace current]::wolves]] wolves"
       [namespace current]::resetVotes
+      [namespace current]::cancelVoteTimer
       set [namespace current]::round 0
       [namespace current]::narrate [set [namespace current]::conf(chanDay)] day_start
       [namespace current]::narrate [set [namespace current]::conf(chanDay)] day_vote [[namespace current]::primaryCommand cmdVote]
+      putserv "PRIVMSG [set [namespace current]::conf(chanDay)] :Suspects possibles: [[namespace current]::aliveList]."
+      putserv "PRIVMSG [set [namespace current]::conf(chanDay)] :Le village a [set [namespace current]::conf(voteTimeout)] minute(s) pour voter. Sans majorite complete, les votes presents feront foi."
       [namespace current]::dlog "-^- Running day jobs"
       hook call job newday [set [namespace current]::daycount]
       foreach wlv [chanlist [set [namespace current]::curNight]] {
@@ -954,12 +1005,47 @@ namespace eval ::lycanobot {
       foreach plr [set [namespace current]::players] {
          pushmode [set [namespace current]::conf(chanDay)] +v $plr
       }
+      [namespace current]::registerGameTimer [set [namespace current]::conf(voteTimeout)] [list [namespace current]::voteTimeout] vote_timeout
    }
 
    proc resetVotes {} {
       set [namespace current]::votes {}
       set [namespace current]::voters {}
       [namespace current]::dlog "*** RESET *** [llength [set [namespace current]::voters]] voters - [llength [set [namespace current]::votes]] votes"
+   }
+
+   proc voteTimeout {} {
+      if {[set [namespace current]::inGame] == 0} {
+         return
+      }
+      set chan [set [namespace current]::conf(chanDay)]
+      if {[set [namespace current]::isNight] == 1 && [info exists [namespace current]::curNight]} {
+         set chan [set [namespace current]::curNight]
+      }
+      if {[llength [set [namespace current]::votes]] == 0} {
+         if {[set [namespace current]::isNight] == 1} {
+            putserv "PRIVMSG [set [namespace current]::conf(chanDay)] :La meute n'a pas choisi de victime cette nuit."
+            [namespace current]::itsDay
+         } else {
+            putserv "PRIVMSG $chan :Le conseil n'a designe personne aujourd'hui."
+            [namespace current]::itsNight
+         }
+         return
+      }
+      putserv "PRIVMSG $chan :Le temps est ecoule. Les votes presents sont depouilles."
+      set vict [[namespace current]::getWinner [set [namespace current]::votes]]
+      if {$vict == -1} {
+         if {[set [namespace current]::isNight] == 1} {
+            [namespace current]::narrate [set [namespace current]::conf(chanDay)] wolves_tie_none
+            [namespace current]::itsDay
+         } else {
+            [namespace current]::narrate [set [namespace current]::conf(chanDay)] tie_none
+            [namespace current]::itsNight
+         }
+         return
+      }
+      [namespace current]::narrate [set [namespace current]::conf(chanDay)] verdict $vict
+      [namespace current]::killVict $vict [set [namespace current]::isNight]
    }
 
    # Randomize jobs, then call the assigner
@@ -973,6 +1059,19 @@ namespace eval ::lycanobot {
          }
       }
       hook call job start
+      [namespace current]::announceVillagers
+   }
+
+   proc announceVillagers {} {
+      foreach nick [set [namespace current]::players] {
+         if {[lsearch -nocase [set [namespace current]::wolves] $nick] != -1} {
+            continue
+         }
+         if {[lsearch -nocase [set [namespace current]::jobbers] $nick] != -1} {
+            continue
+         }
+         putquick "PRIVMSG $nick :Tu es simple villageois. Tu n'as pas de pouvoir nocturne, mais ta voix peut sauver Thiercelieux."
+      }
    }
 
    # Assign job to a player
@@ -1089,6 +1188,7 @@ namespace eval ::lycanobot {
       lappend [namespace current]::votes $text
       [namespace current]::dlog "--- Got [llength [set [namespace current]::voters]] against [llength $votants] alive votants"
       if {[llength [set [namespace current]::voters]] == [llength $votants]} {
+         [namespace current]::cancelVoteTimer
          [namespace current]::narrate $chan all_voted
          set vict [[namespace current]::getWinner [set [namespace current]::votes]]
          if {$vict == -1} {

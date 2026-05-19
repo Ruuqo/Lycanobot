@@ -6,7 +6,7 @@ namespace eval lycanobot {
    #### EDITABLE ####
    #
    # Channel used for the game
-   set lg_main_channel "#village"
+   set lg_main_channel "#Loups-Garous"
    set conf(chanDay) $lg_main_channel
    
    # Default topic - Will be append with status & commands
@@ -45,6 +45,10 @@ namespace eval lycanobot {
    # Default timeout, in minutes, for private role actions.
    set conf(roleTimeout) 2
 
+   # Timeout, in minutes, for village and wolves votes. If not everybody votes,
+   # the bot resolves the current votes or passes the turn.
+   set conf(voteTimeout) 3
+
    # Cooldown, in seconds, for the public composition command.
    set conf(compositionCooldown) 60
 
@@ -58,6 +62,13 @@ namespace eval lycanobot {
    # persistent channel list. The default pattern follows lg_wolves_channel_*.
    set conf(cleanLegacyNightChannels) 1
    set conf(legacyNightChannelPattern) ""
+
+   # Old public channels to remove from Eggdrop's persistent channel list.
+   set conf(legacyMainChannels) "#village"
+
+   # Modes kept on the fixed wolves channel. +i blocks joins without invite,
+   # +s hides the channel from most public channel listings/whois displays.
+   set conf(wolvesChannelModes) "+is"
 
    # Command aliases. Keep the leading ! and separate aliases with spaces.
    set conf(cmdStart) "!partie !start !game"

@@ -19,8 +19,10 @@ namespace eval seer {
       if {![info exists [namespace current]::nick]} { return }
       if {[[namespace parent]::isAlive [set [namespace current]::nick]]} {
          set [namespace current]::tries 0
+         set targets [[namespace parent]::aliveList [set [namespace current]::nick]]
          putquick "PRIVMSG [set [namespace current]::nick] :Tape \002[[namespace parent]::primaryCommand cmdSeerCheck] <joueur>\002 ici pour savoir si ce joueur est loup-garou."
          putquick "PRIVMSG [set [namespace current]::nick] :Tu peux aussi taper \002[[namespace parent]::primaryCommand cmdRolePass]\002 pour ne rien faire cette nuit."
+         putquick "PRIVMSG [set [namespace current]::nick] :Joueurs que tu peux sonder: $targets."
          foreach cmd [[namespace parent]::commandAliases cmdSeerCheck] {
             bind msgm - "*$cmd*" [namespace current]::whois
          }
