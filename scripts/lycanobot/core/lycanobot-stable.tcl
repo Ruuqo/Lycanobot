@@ -25,6 +25,9 @@ namespace eval ::lycanobot {
    
    if {[catch {package require hook}]} {
       putlog "ATTENTION : le paquet hook est requis. Le jeu tournera en version minimale."
+   }
+
+   if {[llength [info commands ::hook::bind]] == 0} {
       namespace eval ::hook {
          variable hooks
          proc bind {group event name callback} {
@@ -46,6 +49,9 @@ namespace eval ::lycanobot {
             }
          }
       }
+   }
+
+   if {[llength [info commands ::hook]] == 0} {
       proc ::hook {subcmd args} {
          set cmd ::hook::$subcmd
          if {[llength [info commands $cmd]] == 0} {
@@ -117,6 +123,29 @@ namespace eval ::lycanobot {
          if {[string match -nocase $pattern $chan]} {
             [namespace current]::dlog "--> Suppression de l'ancien salon loup persistant: $chan"
             catch {channel remove $chan}
+         }
+      }
+   }
+
+   proc cleanupWolvesChannel {} {
+      set chans [list [set [namespace current]::conf(chanNight)]]
+      if {[info exists [namespace current]::curNight] && [set [namespace current]::curNight] ne ""} {
+         lappend chans [set [namespace current]::curNight]
+      }
+      foreach chan [lsort -unique -nocase $chans] {
+         catch {unbind join - "$chan *" [namespace current]::wolfInChannel}
+         if {![validchan $chan] || ![botonchan $chan]} {
+            continue
+         }
+         [namespace current]::dlog "<-- Nettoyage de la taniere $chan"
+         foreach nick [chanlist $chan] {
+            if {[isbotnick $nick]} {
+               continue
+            }
+            catch {pushmode $chan -v $nick}
+            if {[catch {putkick $chan $nick "La partie est terminee. La taniere se referme."} err]} {
+               [namespace current]::dlog "*** ATTENTION *** Kick impossible sur $chan pour $nick: $err"
+            }
          }
       }
    }
@@ -981,18 +1010,7 @@ namespace eval ::lycanobot {
       [namespace current]::dlog "<-- Unloading jobs (if needed)"
       catch {hook call job clean}
       catch {hook forget job}
-      if {[info exists [namespace current]::curNight] && [set [namespace current]::curNight] ne ""} {
-         [namespace current]::dlog "<-- Cleaning wolves channel [set [namespace current]::curNight]"
-         catch {unbind join - "[set [namespace current]::curNight] *" [namespace current]::wolfInChannel}
-         if {[validchan [set [namespace current]::curNight]] && [botonchan [set [namespace current]::curNight]]} {
-            foreach wlv [chanlist [set [namespace current]::curNight]] {
-               pushmode [set [namespace current]::curNight] -v $wlv
-               if {![isbotnick $wlv]} {
-                  putkick [set [namespace current]::curNight] $wlv "La partie est terminee. La taniere se referme."
-               }
-            }
-         }
-      }
+      [namespace current]::cleanupWolvesChannel
       [namespace current]::dlog "<-- Removing player status in [set [namespace current]::conf(chanDay)]"
       foreach plr [chanlist [set [namespace current]::conf(chanDay)]] {
          pushmode [set [namespace current]::conf(chanDay)] -v $plr
