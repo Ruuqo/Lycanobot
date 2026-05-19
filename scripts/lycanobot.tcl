@@ -54,6 +54,11 @@ namespace eval lycanobot {
    # Require the bot to be op or halfop on the public channel before a game starts.
    set conf(requireMainOp) 1
 
+   # Remove old random wolves channels left by previous versions from Eggdrop's
+   # persistent channel list. The default pattern follows lg_wolves_channel_*.
+   set conf(cleanLegacyNightChannels) 1
+   set conf(legacyNightChannelPattern) ""
+
    # Command aliases. Keep the leading ! and separate aliases with spaces.
    set conf(cmdStart) "!partie !start !game"
    set conf(cmdJoin) "!jouer !play !join"

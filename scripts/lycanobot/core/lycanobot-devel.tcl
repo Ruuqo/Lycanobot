@@ -77,6 +77,8 @@ namespace eval ::lycanobot {
       [namespace current]::configDefault compositionCooldown 60
       [namespace current]::configDefault requireWolvesOp 1
       [namespace current]::configDefault requireMainOp 1
+      [namespace current]::configDefault cleanLegacyNightChannels 1
+      [namespace current]::configDefault legacyNightChannelPattern ""
       [namespace current]::configDefault cmdStart "!partie !start !game"
       [namespace current]::configDefault cmdJoin "!jouer !play !join"
       [namespace current]::configDefault cmdComplete "!complet"
@@ -97,6 +99,26 @@ namespace eval ::lycanobot {
       # Le salon des loups est fixe en V2. Ancienne cle gardee par compatibilite.
       set [namespace current]::conf(chanRand) 0
       set [namespace current]::gameBans [split [set [namespace current]::conf(gameBans)]]
+   }
+
+   proc cleanupLegacyNightChannels {} {
+      if {![set [namespace current]::conf(cleanLegacyNightChannels)]} {
+         return
+      }
+      set fixed [string tolower [set [namespace current]::conf(chanNight)]]
+      set pattern [set [namespace current]::conf(legacyNightChannelPattern)]
+      if {$pattern eq ""} {
+         set pattern "[set [namespace current]::conf(chanNight)]_*"
+      }
+      foreach chan [channels] {
+         if {[string tolower $chan] eq $fixed} {
+            continue
+         }
+         if {[string match -nocase $pattern $chan]} {
+            [namespace current]::dlog "--> Suppression de l'ancien salon loup persistant: $chan"
+            catch {channel remove $chan}
+         }
+      }
    }
 
    proc initNarration {} {
@@ -500,6 +522,7 @@ namespace eval ::lycanobot {
       [namespace current]::initV2Config
       [namespace current]::initNarration
       [namespace current]::dlog "Initialisation de la partie"
+      [namespace current]::cleanupLegacyNightChannels
       if {![validchan [set [namespace current]::conf(chanDay)]]} {
          [namespace current]::dlog "--> Joining channel [set [namespace current]::conf(chanDay)]]"
          channel add [set [namespace current]::conf(chanDay)]
